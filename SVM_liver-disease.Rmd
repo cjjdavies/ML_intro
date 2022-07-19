@@ -1,0 +1,389 @@
+---
+title: "PU5558-resit-assessment"
+header-includes:
+ \usepackage{fancyhdr}
+ \usepackage{lastpage}
+format: pdf
+editor: visual
+---
+
+<!--- Define Headers and Footers --->
+
+```{=tex}
+\fancypagestyle{plain}{%
+  \renewcommand{\headrulewidth}{0pt}%
+  \fancyhf{}%
+  \fancyhead[LE,RO]{Student number: 52198593}
+  \fancyfoot[R]{\footnotesize Page \thepage\, of\, \pageref*{LastPage}}
+  \setlength\footskip{2cm}
+}
+\pagestyle{plain}
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Load necessary packages
+
+```{r load-packages}
+library(knitr)
+library(dplyr) # data wrangling
+library(forcats)
+library(ggplot2) # graphics
+library(rsample) # data splitting
+
+library(caret) # classification and regression
+library(kernlab) # for fitting SVM
+
+library(vip) # variable importance plots
+
+```
+
+## Load dataset
+
+```{r load-dataset}
+# Load dataset, using dataset title, specify the first row as column names, 
+# first column as row names, and the comma separator to delimit characters
+hepC <- read.csv("hepatitisC_dataset.csv", header = T, row.names = 1, sep = ",")
+
+# Check the structure of the dataset, showing the variable names, types and values
+str(hepC)
+
+# Inspect a summary statistics, checking for anomalies and missing values
+summary(hepC)
+
+```
+
+## Dataset description
+
+Variables found in the dataset are described here and summarised in Table 1.
+
+**Category**: a categorical, discrete (nominal) variable, with five categories:
+
+-   0 = blood donor
+-   0s = suspect blood donor
+-   1 = hepatitis without fibrosis or with only minor signs of portal fibrosis
+-   2 = therapy-relevant fibrosis
+-   3 = liver transplant (LTX)-relevant end stage liver cirrhosis
+
+**Age**: a continuous integer, ranging from 19 years to 77 years
+
+**Sex**: biological sex of the patient, as a binary, categorical variable:
+
+-   "f" = female
+-   "m" = male
+
+**ALB**: albumin is a plasma protein produced by the liver and used to diagnose for cirrhosis in patients with hepatitis C. Low levels in the blood may indicate cirrhosis. It is a continuous numerical variable, with a range of 14.9 to 82.2 in the dataset.
+
+**ALP**: alkaline phosphatase is an enzyme made in the liver and bones. High levels in blood tests may indicate liver disease. It is a continous numerical variable, with a range of 11.3 to 416.6 in the dataset.
+
+**ALT**: alanine amino-transferase is an enzyme involved in the conversion of alanine to glutamate and pyruvate. High levels in blood tests may indicate liver damage. It is a continuous numerical variable, with a range of 0.9 to 325.3 in the dataset.
+
+**AST**: aspartate amino-transferase is an enzyme present in various parts of the body. High concentrations in the blood may indicate liver damage or distress. It is a continuous numerical variable, with a range of 10.6 to 324.4 in the dataset.
+
+**BIL**: bilirubin is a by-product of the catabolic process involved in the normal breakdown of red blood cells and other porphyrin-based cells. It is process by the liver and other organs prior to excretion. High levels (>1.2mg/ dL) in blood tests indicate this process is not occurring as it should, and may be indicative of a liver disorder. It is a continuous numerical variable, with a range of 0.8 to 254.0 in the dataset.
+
+**CHE**: choline esterase is an enzyme used to identify the presence of liver cirrhosis. Reduced levels in the blood may indicate cirrhosis. It is a continuous numerical variable, with a range of 1.42 to 16.41 in the dataset.
+
+**CHOL**: may refer to cholesterol, which is broken down by the liver. If the liver is not functioning properly it may not be able to break down cholesterol efficiently. Diets high in cholesterol may cause nonalcoholoic fatty liver disease. It is a continuous numerical variable, with a range of 1.43 to 9.67 in the dataset.
+
+**CREA**: may refer to creatine or creatinine; creatine is an amino acid made by the liver and used by the muscles and brain in the metabolism of energy. Impaired liver function may reduce the production of creatine, and therefore creatinine. It is a continuous numerical variable, with a range of 8.0 to 1079.1 in the dataset.
+
+**GGT**: $γ$-glutamyl-transferase in an enzyme found mostly in the liver, but is present in small quantities throughout the body. An impaired liver may 'leak' GGT into the bloodstream; high levels in blood tests may be indicative of liver damage or disease. It is a continuous numerical variable, with a range of 4.5 to 650.9 in the dataset.
+
+**PROT**: may refer to protein C or C-reactive protein, a protein dependent on vitamin K, and made in the liver. A deficiency of protein C may indicate liver disease, particularly alcoholic liver disease. It is a continuous numerical variable, with a range of 44.8 to 90.0 in the dataset.
+
++--------------+-------------------------------+--------------------------+
+| **Variable** | **Description**               | **Range of values**      |
++:=============+:==============================+:=========================+
+| Category     | Nominal, categorical variable | 0 = Blood donor          |
++--------------+-------------------------------+--------------------------+
+|              |                               | 0s = suspect blood donor |
++--------------+-------------------------------+--------------------------+
+|              |                               | 1 = Hepatitis            |
++--------------+-------------------------------+--------------------------+
+|              |                               | 2 = Fibrosis             |
++--------------+-------------------------------+--------------------------+
+|              |                               | 3 = Cirrhosis            |
++--------------+-------------------------------+--------------------------+
+| Age          | Continuous variable, integer  | 19 - 77 years            |
++--------------+-------------------------------+--------------------------+
+| Sex          | Categorical, binary variable  | "f" = female             |
++--------------+-------------------------------+--------------------------+
+|              |                               | "m" = male               |
++--------------+-------------------------------+--------------------------+
+| ALB          | Albumin                       | From 14.9 to 82.2        |
+|              |                               |                          |
+|              | (numerical, continuous)       |                          |
++--------------+-------------------------------+--------------------------+
+| ALP\*        | Alkaline phosphatase          | From 11.3 to 416.6       |
+|              |                               |                          |
+|              | (numerical, continuous)       |                          |
++--------------+-------------------------------+--------------------------+
+| ALT          | Alanine amino-transferase     | From 0.9 to 325.3        |
+|              |                               |                          |
+|              | (numerical, continuous)       |                          |
++--------------+-------------------------------+--------------------------+
+| AST          | Aspartate amino-transferase   | From 10.6 to 324.40      |
+|              |                               |                          |
+|              | (numerical, continuous)       |                          |
++--------------+-------------------------------+--------------------------+
+| BIL          | Bilirubin                     | From 0.8 to 254.0        |
+|              |                               |                          |
+|              | (numerical, continuous)       |                          |
++--------------+-------------------------------+--------------------------+
+| CHE          | Choline esterase              | From 1.42 to 16.41       |
+|              |                               |                          |
+|              | (numerical, continuous)       |                          |
++--------------+-------------------------------+--------------------------+
+| CHOL\*       | Cholesterol                   | From 1.43 to 9.67        |
+|              |                               |                          |
+|              | (numerical, continuous)       |                          |
++--------------+-------------------------------+--------------------------+
+| CREA\*       | Creatine                      | From 8.0 to 1079.1       |
+|              |                               |                          |
+|              | (numerical, continuous)       |                          |
++--------------+-------------------------------+--------------------------+
+| GGT          | $γ$-glutamyl-transferase      | From 4.5 to 650.9        |
+|              |                               |                          |
+|              | (numerical, continous)        |                          |
++--------------+-------------------------------+--------------------------+
+| PROT\*       | Protein C                     | From 44.8 to 90.0        |
+|              |                               |                          |
+|              | (numerical, continuous)       |                          |
++--------------+-------------------------------+--------------------------+
+
+: Summary of variables, a brief description and the values associated with each variable. Variables marked with an asterisk are not specified from Hoffman *et al*. 2018 and have been determined from Lichtinghagen *et al*. 2013 and wider internet searches.
+
+## Suitable machine learning algorithm for three questions:
+
+1. What percentage of men in the dataset have cirrhosis?
+
+A classification and regression algorithm might be appropriate in this instance. One such algorithm is the Decision Tree Algorithm that uses Attribute Selection Measures to determine the best point at which to split the data in an iterative process to arrive at the desired result. For example, the first split could divide the dataset into female and male, then divide the 'male' data within 'Category' to predict the percentage of men with cirrhosis.
+
+2. Can we separate the patients in the dataset into groups according to the diagnostic tests?
+
+K-means clustering can be used to create homogenous groups with no overlap. Data are assigned into 'K' groups on the basis of similarity between their values, or 'distances' based on surrounding datapoints. Clustering is useful for detecting underlying structure or patterns, and can help identify outliers.
+
+3. Can we predict whether a patient is a blood donor, or has Hepatitis C? Here we treat the different stages ('just' Hepatitis C, Fibrosis, Cirrhosis) as one category.
+
+A classification algorithm would be appropriate because they use labelled data to identify groups and assign new datapoints to those groups. One particular algorithm is Support Vector Machine (SVM), which looks for a boundary or dividing line between two groups of data, and is effective for data with high dimensionality. It is possible to use the algorithm on linear and non-linear data, though in the latter case a specific kernel function needs to be identified, which can be time-consuming and computationally intensive.
+One drawback is that it does not work with missing data, so this will need to be managed appropriately prior to implementation.
+
+## Model building to answer chosen question
+
+1. Organising data
+
+The question to be answered is number 3, for which the Support Vector Machine algorithm will be used to classify the data and predict whether a patient is a blood donor or has Hepatitis C.
+
+The 'Category' variable needs to be recoded to have two levels instead of five, and converted to a factor. The levels 'Blood Donor' and 'suspect Blood Donor' will be combined into 'Blood'; the levels 'Hepatitis', 'Fibrosis' and 'Cirrhosis' will be combined into 'Hepatitis'.
+
+For simplicity, rows with missing values, coded 'NA', will be removed.
+
+```{r data-org}
+
+# Rename factor levels to rename 0=Blood Donor and 0s=suspect Blood Donor as 0,
+# and 1=Hepatitis, 2=Fibrosis, and 3=Cirrhosis as 1. This is important to be
+# able to implement SVM.
+
+hepC$Category <- recode(hepC$Category,
+       "1=Hepatitis" = "Hepatitis",
+       "2=Fibrosis" = "Hepatitis",
+       "3=Cirrhosis" = "Hepatitis",
+       "0=Blood Donor" = "Blood",
+       "0s=suspect Blood Donor" = "Blood",
+       .default = levels(hepC$Category)) # retains the original structure
+
+# Specify 'Category' as a factor with two levels
+hepC$Category <- factor(hepC$Category)
+
+# Remove rows with missing data
+hepC_narm <- hepC[complete.cases(hepC),]
+```
+
+2. Selection and preprocessing of predictors
+
+Here the variables 'Age' and 'Sex' are not essential, so they can be dropped from the dataset. All blood sample variables are retained as predictors and the 'Category' variable is retained as the outcome.
+For SVM, preprocessing occurs within the model specification (section 4).
+
+```{r predictors}
+# Filter out age and sex from the dataframe, using the blood sample data as
+# predictors, and the Category as the dependent variable
+hepC_sub <- hepC_narm %>% 
+  select (-c(Age, Sex))
+
+```
+
+3. Data splitting
+
+The first step is to set the seed for random number generation for reproducibility.
+
+Data are split into 70% training data and 30% testing data, using 'Category' as the stratum. Stratification ensures an even split of data within the 'Category' variable so that there is a balanced representation of each of the factor levels within the training and testing datasets.
+
+```{r data-splitting}
+# Set seed for reproducibility
+set.seed(1234)
+
+# Training data set at 70% training data and 30% testing data
+hepC_sub_split <- initial_split(hepC_sub, prop = 0.7, strata = "Category")
+hepC_train <- training(hepC_sub_split)
+hepC_test <- testing(hepC_sub_split)
+
+```
+
+4.  Model specification and training
+
+The SVM algorithm can be specified to include validation as part of the training step. The function 'trainControl' allows for cross-validation methods using various approaches ('method') and multiple iterations ('number'). Here, it will use cross-validation ('cv') to compute performance metrics across 10 resamples of the training data.
+
+Furthermore, as SVM does not automatically estimate class probabilities, these can be specified in 'trainControl'. Predictions can be saved for future comparison and evaluation against the testing dataset. A 'twoClassSummary' is necessary for fitting the area under the ROC curve (AUC-ROC), which is specified in the SVM model in the 'metric' parameter. This is a specialized function for measuring model performance for two classes; an area of 1.0 indicates perfect predictive capability.
+
+The SVM model is fit to the data using the 'train' function, specifying 'Category' as the outcome variable, with all remaining variables ('the bloods') as the predictors using the training dataset.
+Method 'svmRadial' is used to begin the process as it is the most flexible kernel with the ability to fit non-linear data.
+
+The 'preProcess' function estimates the appropriate transformation based on the training data, and applies the results to new datasets; 'center' subtracts the mean of the predictor's data from the predictor values, whilst 'scale' divides by the standard deviation. Finally 'tuneLength' specifies the level of granularity required for tuning the algorithm.
+
+```{r model-spec}
+
+set.seed(1234)  # for reproducibility
+
+# trainControl function for cross-validation and estimation of class
+# probabilities
+ctrl <- trainControl(
+  method = "cv", 
+  number = 10, 
+  classProbs = TRUE,
+  savePredictions = TRUE,
+  summaryFunction = twoClassSummary  # needed for AUC/ROC
+)
+
+# Category is specified as a two-level factor variable for classification purposes
+# The radial method is considered the best starting point to train the model,
+# and can be refined with more appropriate methods in later steps
+
+# Build the SVM
+set.seed(1234)  # for reproducibility
+
+hepC_sub_auc <- train(
+  Category ~ ., 
+  data = hepC_train,
+  method = "svmRadial",               
+  preProcess = c("center", "scale"), # data transformations are estimated
+  metric = "ROC",  # area under ROC curve (AUC)       
+  trControl = ctrl, # using the trainControl method in the previous step
+  tuneLength = 10
+)
+
+# Inspect the model parameters and results
+hepC_sub_auc
+
+plot(hepC_sub_auc)
+```
+
+These results indicate that the classifier is providing the best results on C = 2, with an ROC of >0.99, sensitivity (Sens) of >0.98 and specificity (Spec) of >0.93. The model now needs to be tested.
+
+5.  Model evaluation
+
+To evaluate the model, one approach is to use the 'predict' function to determine the accuracy of the training model against the test dataset, and inspect a confusion matrix and its statistics.
+
+```{r model-eval}
+# Use the model developed from the training data to predict Blood or Hepatitis
+# within the test data
+hepC_test_pred <- predict(hepC_sub_auc, newdata = hepC_test)
+
+# Inspect the model - this only shows which variables have been labelled
+hepC_test_pred
+
+# View the confusion matrix of the predicted model, inspecting the Blood and
+# Hepatitis predictions
+confusionMatrix(hepC_test_pred, hepC_test$Category)
+
+```
+The model has achieved a high level of accuracy, > 0.9774, or 97.74%, on the test data. Three 'Hepatitis' were incorrectly labelled; one 'Blood' was incorrectly labelled.
+
+The sensitivity column (Sens) shows the true 'positive' rate (or first class) - proportion of 'Blood' predicted as 'Blood', 98%; while the specificity column (Spec) shows the true 'negative' rate (or second class) - proportion of 'Hepatitis' predicted as 'Hepatitis', 95%. The positive predictive value (i.e. blood donor) is greater than the negative predictive value (i.e. hepatitis).
+
+The Kappa statistic compares the accuracy of the model to a completely random classifier, and is particularly useful when used to compare unbalanced data, such as the training and testing datasets. A value of 1 indicates a perfect classifier, whilst a value of 0 indicates a completely useless classifier. A value of 0.8873 is very high and indicates a superior classifier compared to a totally random system.
+
+Finally, the most important variables for predicting hepatitis can be visualised in a variable importance plot.
+
+```{r vip}
+
+# Variable importance plot
+set.seed(1234)  # for reproducibility
+
+prob_hepC <- function(object, newdata) {
+  predict(object, newdata = newdata, type = "prob")[, "Hepatitis"]
+}
+
+vip(hepC_sub_auc, method = "permute", nsim = 5, train = hepC_train, 
+    target = "Category", metric = "auc", reference_class = "Hepatitis", 
+    pred_wrapper = prob_hepC)
+
+```
+The most important variables for predicting hepatitis are aspartate amino-transferase (AST), alkaline phosphatase (ALP) and alanine amino-transferase (ALT).
+
+## Limitations of machine learning model
+
+Despite being a reasonably easy model to fit and interpret, there are numerous possibilities for tuning SVM models, and many different types of parameters that can be tweaked. There are many different types of kernel function from which to choose, and each step of the tuning process has multiple options available. Some of these steps can be automated in newer SVM-fitting packages, but it is important to understand the outcomes of automated processes and why certain functions may be selected over others. 
+
+Applying this type of model to a larger dataset would be computationally expensive, and it would take a considerable amount of time to fine-tune the model to achieve a desirable result. There are potentially more efficient models that could provide accurate results in a much shorter time and with fewer parameters to tweak.
+
+Fortunately the hepatitis data separated into classes quite easily and with a good level of accuracy, but this may be due to the Category levels being aggregated into two primary levels of 'Blood' and 'Hepatitis'. Noisy datasets, such as where data might be mislabelled, may be more difficult to classify using this approach due to greater overlap between datapoints. Whilst there are methods to attempt to work around this issue, it may be more appropriate to use other classification algorithms, as the SVM is not well suited to more than three categories, or where data overlap.
+
+These types of algorithms do not produce conditional probabilities, which are an important feature of other types of models, such as logistic regression and gradient boosts. SVM seems to 'guess' at class assignment, with no clear indication as to why. Models that produce some type of statistical estimate have wider applications in prediction.
+
+## Analysis of the paper by Hoffmann G et al. Using machine learning techniques to generate laboratory diagnostic pathways - a case study. J Lab Precis Med 2018; 3: 58-67.
+
+The main aims of the study were to:
+
+- compare two machine learning algorithms that generate decision trees, using rpart and ctree from the "partykit" package
+
+- evaluate the statistical software tool, "partykit", that generates decision trees from laboratory data
+
+- demonstrate how decision trees can be automatically constructed from laboratory data
+
+- determine the extent to which the models can distinguish three categories of patient: C1 = hepatitis without fibrosis or with only minor signs of portal fibrosis, C2 = therapy-relevant fibrosis, and C3 = liver-transplant-relevant end stage liver cirrhosis
+
+- test and validate a decision tree to determine how well the algorithm will predict the diagnoses of new patients.
+
+*The main findings*
+
+Both trees are easy to implement and apply to data, and it is possible to produce plausible outcomes that support clinical expertise in diagnosing cirrhosis and distinguishing between slight and severe fibrosis.
+
+With the exception of $y$-glutamyl-transferase and the transaminases, most C1 patients results fell within the minimum and maximum reference level set by the Medical University of Hannover; C3 patients showed results either above or below the reference level. The mean values of C1 and C2 were not significantly different in most cases, but there were highly significant differences (p <0.001) between C2 and C3.
+
+An Enhanced Liver Fibrosis (ELF) score showed significant differences in mean values between each class, and increased the predictive capability of the models. The mean values of ALB, ALT, CHE and the ELF score were significantly different between C2 and C3.
+
+Both types of decision tree were able to distinguish C1 and C3 using ALB, ALT and CHE; the rpart algorithm included $y$-glutamyl-transferase to separate C2, even though the means were not significantly different. After validation via the 'leave-one-out' approach, including the ELF score simplified the rpart tree and increased accuracy from 57.5% to 75.3%, but the inclusion of the ELF score with the ctree reduced accuracy from 72.6% to 62.1%.
+
+The 'leave-one-out' approach to validation is useful for smaller datasets where splitting data into training and testing sets is not feasible. Multiple iterations of the trees are produced, each time leaving one case out of the tree, and the remaining data used for training. The left out case is then used to test the algorithm and a prediction of the corresponding diagnosis made.
+
+Intermediate fibrosis stages are difficult to separate from the earlier and later stages.
+
+Overall, the decision trees were found to be a useful support tool to the standard approach used by clinicians to assess liver disease based on a series of blood test results.
+
+*Decision Tree algorithms*
+
+The two algorithms used are known as 'Decision Trees', which are supervised classification or regression algorithms that model probabilites and outcomes with a dataset to create splits at points where there is the greatest difference in the dataset. For categorical data, this may be a binary variable, such as Yes/No or Male/Female.
+
+The method is straight-forward to use and explain, which is important for transparency in decision-making. In this case, decision trees were able to use data that did not appear to be significant when comparing group means, such as with GGT, but became important as the algorithms worked their way through the data and were able to create splits on much smaller differences that were not detected using conventional approaches.
+
+As mentioned, one of the key advantages is the ease with which these methods can be understood and explained, and the results challenged. It is quite easy to trace the steps taken by the best-performing algorithms and inspect the decision points, or nodes, to determine how a final output has been reached. The model specification and validation is also quite straight-forward, and they can be applied to categorical and continuous data. Minimal preprocessing is required, such as normalization and standardization, and they can work with missing data.
+
+They can be applied to relatively small datasets, provided an appropriate validation method is used, such as the 'leave-one-out' method outlined in the paper. Decision trees have a range of alternative validation methods for larger datasets, where splitting data in to training and testing sets is feasible. These are also not computationally-intensive methods for smaller datasets.
+
+One of the main disadvantages is that they are not particularly robust, and it can be difficult to classify groups accurately, as was the case here. Larger datasets can take a lot of time and computational power to analyse, increasing the complexity of the models. Slight changes in the data can cause substantial changes in the outcome, which does not make them the most stable of approaches.
+
+Finally, they are not as accurate as methods like Random Forest, Gradient Boosting and Support Vector Machine, though these methods are also more complex and can suffer from the 'black box' effect, meaning they can be much harder to understand and challenge.
+
+*Study limitations*
+
+The dataset used for this study was quite small, which meant that the validation approach is not as robust as it would have been had an independent dataset been available for testing the models. The authors presented the accuracy of the models with and without 'leave-one-out' validation, with greatly reduced accuracy after validation indicating the unvalidated models were overfitting the data.
+
+The purpose of the study was to evaluate the use of decision trees for supporting clinical diagnosis of different stages of liver disease, using a standard laboratory-derived dataset on which to 'practice' applying and refining the models. None of the models were easily able to distinguish patients in C2 group. Indeed the possible overlap in datapoints may make this group difficult to classify, particularly with limited data. Further the authors also discussed the importance of screening out healthy patients very early in the diagnostic process to limit the emotional and economic burden on that group. This type of behaviour is not modelled by decision trees. Including cost modelling as part of the process was highlighted as having potential to improve the construction of diagnostic pathways.
+
+*Ethical and legal implications*
+
+The authors declared no conflicts of interest with the study, received no funding for the work, and take full responsibility for all issues and questions regarding accuracy and integrity of results.
+
+No legal implications were discussed.
