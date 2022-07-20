@@ -1,5 +1,5 @@
 ---
-title: "PU5558-resit-assessment"
+title: "Support Vector Machine classification of patients with liver disease"
 header-includes:
  \usepackage{fancyhdr}
  \usepackage{lastpage}
